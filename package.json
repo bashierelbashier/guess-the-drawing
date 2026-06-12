@@ -1,0 +1,15 @@
+{
+  "name": "guess-the-drawing",
+  "version": "1.0.0",
+  "description": "Real-time multiplayer drawing-guessing party game (in-memory, no DB)",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

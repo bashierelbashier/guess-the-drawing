@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Guess the Drawing 🎨</title>
+<style>
+  :root {
+    --bg: #0f1226;
+    --panel: #1a1f3d;
+    --panel-2: #232a52;
+    --accent: #6c7bff;
+    --accent-2: #00d4a0;
+    --danger: #ff5d73;
+    --text: #e8ebff;
+    --muted: #99a0cc;
+    --line: #2c3463;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: radial-gradient(1200px 700px at 70% -10%, #242a5c 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  button {
+    font: inherit; cursor: pointer; border: none; border-radius: 10px;
+    padding: 12px 18px; background: var(--accent); color: white; font-weight: 600;
+    transition: transform .05s ease, filter .15s ease;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost { background: var(--panel-2); }
+  button.accent2 { background: var(--accent-2); color: #062; }
+  input {
+    font: inherit; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: #0d1030; color: var(--text); outline: none; width: 100%;
+  }
+  input:focus { border-color: var(--accent); }
+  .hidden { display: none !important; }
+
+  /* Landing */
+  .center { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+    padding: 28px; width: 100%; max-width: 420px; box-shadow: 0 24px 60px rgba(0,0,0,.45);
+  }
+  .card h1 { margin: 0 0 4px; font-size: 28px; }
+  .card p.sub { margin: 0 0 22px; color: var(--muted); }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  .divider { display: flex; align-items: center; gap: 10px; color: var(--muted); margin: 18px 0; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .err { color: var(--danger); min-height: 18px; font-size: 14px; }
+
+  /* Game */
+  #game { padding: 16px; max-width: 1200px; margin: 0 auto; }
+  .topbar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 12px 16px; margin-bottom: 14px;
+  }
+  .pill { background: var(--panel-2); border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 14px; }
+  .timer { font-size: 22px; font-weight: 800; min-width: 64px; text-align: center; }
+  .timer.warn { color: var(--danger); }
+  .hint {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 26px;
+    letter-spacing: 6px; font-weight: 700; flex: 1; text-align: center; min-width: 180px;
+  }
+  .spacer { flex: 1; }
+
+  .layout { display: grid; grid-template-columns: 1fr 320px; gap: 14px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .canvas-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .canvas-box { position: relative; width: 100%; aspect-ratio: 4 / 3; }
+  canvas { width: 100%; height: 100%; background: #fff; border-radius: 10px; display: block; }
+  .overlay-msg {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    background: rgba(10,12,30,.55); border-radius: 10px; text-align: center;
+    font-size: 18px; padding: 20px; pointer-events: none;
+  }
+  .draw-badge {
+    position: absolute; top: 18px; left: 18px; background: rgba(13,16,48,.8);
+    padding: 6px 12px; border-radius: 999px; font-size: 13px; color: var(--muted);
+  }
+
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .player { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 9px; font-size: 15px; }
+  .player.me { background: var(--panel-2); }
+  .player .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .player .score { font-weight: 700; }
+  .player .tag { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--line); }
+  .player .tag.ok { background: var(--accent-2); color: #062; }
+  .player.off { opacity: .4; }
+
+  .feed { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .msg { font-size: 14px; padding: 6px 9px; border-radius: 8px; background: var(--panel-2); }
+  .msg.correct { background: rgba(0,212,160,.18); color: #b9ffe9; }
+  .msg.sys { background: transparent; color: var(--muted); font-style: italic; padding: 2px 9px; }
+  .msg b { color: var(--text); }
+  .guess-row { display: flex; gap: 8px; margin-top: 10px; }
+  .guess-row input { flex: 1; }
+  .invite { display: flex; gap: 8px; margin-top: 8px; }
+  .invite input { font-size: 13px; }
+
+  .modal { position: fixed; inset: 0; background: rgba(6,8,22,.78); display: grid; place-items: center; padding: 20px; z-index: 50; }
+  .modal .card { max-width: 460px; }
+  .rank { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); margin-bottom: 8px; }
+  .rank .pos { font-weight: 800; width: 28px; }
+  .rank .name { flex: 1; }
+  .rank .score { font-weight: 800; }
+  .rank.gold { background: linear-gradient(90deg, #4a3d12, #2b2410); border: 1px solid #c8a13a; }
+</style>
+</head>
+<body>
+
+<!-- ============ LANDING ============ -->
+<div id="landing" class="center">
+  <div class="card">
+    <h1>Guess the Drawing 🎨</h1>
+    <p class="sub">The computer sketches — you race the clock to guess it.</p>
+    <div class="stack">
+      <input id="nameInput" maxlength="20" placeholder="Your name" />
+    </div>
+    <div class="stack" style="margin-top:14px">
+      <button id="createBtn">Create a party</button>
+      <div class="divider">or</div>
+      <input id="roomInput" maxlength="5" placeholder="Room code (e.g. ABCDE)" style="text-transform:uppercase" />
+      <button id="joinBtn" class="ghost">Join party</button>
+    </div>
+    <p class="err" id="landingErr"></p>
+  </div>
+</div>
+
+<!-- ============ GAME ============ -->
+<div id="game" class="hidden">
+  <div class="topbar">
+    <span class="pill">Room <b id="roomCode"></b></span>
+    <span class="pill" id="roundPill">Lobby</span>
+    <div class="hint" id="hint"></div>
+    <div class="spacer"></div>
+    <div class="timer" id="timer">--</div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="canvas-wrap">
+        <div class="canvas-box">
+          <canvas id="canvas" width="800" height="600"></canvas>
+          <div class="draw-badge hidden" id="drawBadge">✏️ drawing…</div>
+          <div class="overlay-msg hidden" id="canvasOverlay"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <h3>Players</h3>
+        <div id="players"></div>
+        <div id="lobbyControls" style="margin-top:10px">
+          <div class="invite">
+            <input id="inviteLink" readonly />
+            <button class="ghost" id="copyBtn">Copy</button>
+          </div>
+          <button id="startBtn" style="width:100%; margin-top:10px">Start game</button>
+          <p class="err" id="gameErr"></p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Guesses</h3>
+        <div class="feed" id="feed"></div>
+        <div class="guess-row" id="guessRow">
+          <input id="guessInput" placeholder="Type your guess…" />
+          <button id="guessBtn">Send</button>
+        </div>
+        <p class="err" id="guessHint" style="font-size:13px; min-height:0; color:var(--muted)"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ RESULTS MODAL ============ -->
+<div id="modal" class="modal hidden">
+  <div class="card">
+    <h1 id="modalTitle">Results</h1>
+    <p class="sub" id="modalSub"></p>
+    <div id="ranks"></div>
+    <button id="playAgainBtn" class="accent2 hidden" style="width:100%; margin-top:14px">Play again</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(() => {
+  const socket = io();
+  const $ = (id) => document.getElementById(id);
+
+  let me = null, hostId = null, roomId = null, state = 'waiting', players = [];
+
+  // ---- Landing ----
+  const params = new URLSearchParams(location.search);
+  if (params.get('room')) $('roomInput').value = params.get('room').toUpperCase();
+  const myName = () => $('nameInput').value.trim() || 'Player';
+  const showLandingErr = (t) => ($('landingErr').textContent = t);
+
+  $('createBtn').onclick = () => {
+    if (!$('nameInput').value.trim()) return showLandingErr('Enter a name first.');
+    socket.emit('create-room', { name: myName() }, (res) => { if (res && res.ok) enterGame(res.roomId, res.playerId); });
+  };
+  $('joinBtn').onclick = doJoin;
+  $('roomInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
+  $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') ($('roomInput').value ? doJoin() : $('createBtn').click()); });
+
+  function doJoin() {
+    if (!$('nameInput').value.trim()) return showLandingErr('Enter a name first.');
+    const code = $('roomInput').value.trim().toUpperCase();
+    if (!code) return showLandingErr('Enter a room code.');
+    socket.emit('join-room', { roomId: code, name: myName() }, (res) => {
+      if (res && res.ok) enterGame(res.roomId, res.playerId);
+      else showLandingErr((res && res.error) || 'Could not join.');
+    });
+  }
+
+  function enterGame(rid, pid) {
+    roomId = rid; me = pid;
+    $('landing').classList.add('hidden');
+    $('game').classList.remove('hidden');
+    $('roomCode').textContent = rid;
+    $('inviteLink').value = `${location.origin}${location.pathname}?room=${rid}`;
+    history.replaceState(null, '', `?room=${rid}`);
+  }
+
+  // ---- Socket events ----
+  socket.on('room-joined', (d) => { hostId = d.hostId; state = d.state; });
+
+  socket.on('player-list', (d) => {
+    players = d.players; hostId = d.hostId; state = d.state;
+    renderPlayers(); updateLobbyControls(); updateGuessUI();
+  });
+
+  socket.on('system-message', (d) => addSys(d.text));
+
+  socket.on('round-start', (d) => {
+    state = 'playing';
+    $('roundPill').textContent = `Round ${d.round} / ${d.totalRounds}`;
+    setHint(d.hint);
+    clearCanvas();
+    clearFeed();
+    $('lobbyControls').classList.add('hidden');
+    $('modal').classList.add('hidden');
+    hideOverlay();
+    addSys(`The computer is drawing — ${d.guessesPerRound} guesses each. Go!`);
+    animateDoodle(d.drawing, d.drawMs || 16000);
+    updateGuessUI();
+  });
+
+  socket.on('timer', (d) => {
+    $('timer').textContent = d.remaining + 's';
+    $('timer').classList.toggle('warn', d.remaining <= 10);
+  });
+
+  socket.on('guess-made', addGuess);
+
+  socket.on('round-end', (d) => {
+    stopAnimation();
+    $('drawBadge').classList.add('hidden');
+    setHint('');
+    $('timer').textContent = '--';
+    $('timer').classList.remove('warn');
+    addSys(`⏱️ The word was: ${d.word}`);
+    showOverlay(`The word was<br><b style="font-size:24px">${escapeHtml(d.word)}</b>`);
+    players = d.players; renderPlayers();
+  });
+
+  socket.on('game-end', (d) => { state = 'ended'; stopAnimation(); showResults(d.players); });
+
+  socket.on('back-to-lobby', () => {
+    state = 'waiting';
+    $('modal').classList.add('hidden');
+    $('lobbyControls').classList.remove('hidden');
+    $('roundPill').textContent = 'Lobby';
+    setHint(''); $('timer').textContent = '--';
+    clearCanvas(); clearFeed(); hideOverlay();
+    $('drawBadge').classList.add('hidden');
+    updateGuessUI();
+  });
+
+  socket.on('error-msg', (d) => { $('gameErr').textContent = d.message; });
+
+  // ---- Players ----
+  function renderPlayers() {
+    const el = $('players');
+    el.innerHTML = '';
+    players.forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'player' + (p.id === me ? ' me' : '') + (p.connected ? '' : ' off');
+      let tags = '';
+      if (p.guessedCorrectly) tags += '<span class="tag ok">✓</span>';
+      if (p.isHost) tags += '<span class="tag">host</span>';
+      row.innerHTML = `<span class="name">${escapeHtml(p.name)}${p.id === me ? ' (you)' : ''}</span>${tags}<span class="score">${p.score}</span>`;
+      el.appendChild(row);
+    });
+  }
+
+  function updateLobbyControls() {
+    if (state === 'waiting') {
+      $('lobbyControls').classList.remove('hidden');
+      const isHost = me === hostId;
+      $('startBtn').classList.toggle('hidden', !isHost);
+      $('startBtn').disabled = !isHost;
+      $('startBtn').textContent = 'Start game';
+      $('roundPill').textContent = 'Lobby';
+    } else {
+      $('lobbyControls').classList.add('hidden');
+    }
+  }
+
+  $('startBtn').onclick = () => socket.emit('start-game');
+  $('copyBtn').onclick = () => {
+    $('inviteLink').select();
+    navigator.clipboard?.writeText($('inviteLink').value);
+    $('copyBtn').textContent = 'Copied!';
+    setTimeout(() => ($('copyBtn').textContent = 'Copy'), 1200);
+  };
+
+  // ---- Guessing (everyone guesses now) ----
+  function updateGuessUI() {
+    const playing = state === 'playing';
+    $('guessRow').classList.toggle('hidden', !playing);
+    if (!playing) { $('guessHint').textContent = ''; return; }
+    const meP = players.find((p) => p.id === me);
+    if (!meP) return;
+    if (meP.guessedCorrectly) {
+      $('guessHint').textContent = 'You guessed it! 🎉';
+      $('guessInput').disabled = true; $('guessBtn').disabled = true;
+    } else if (meP.guessesLeft <= 0) {
+      $('guessHint').textContent = 'Out of guesses for this round.';
+      $('guessInput').disabled = true; $('guessBtn').disabled = true;
+    } else {
+      $('guessHint').textContent = `${meP.guessesLeft} guesses left`;
+      $('guessInput').disabled = false; $('guessBtn').disabled = false;
+    }
+  }
+
+  $('guessBtn').onclick = sendGuess;
+  $('guessInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendGuess(); });
+  function sendGuess() {
+    const t = $('guessInput').value.trim();
+    if (!t) return;
+    socket.emit('guess', { text: t });
+    $('guessInput').value = '';
+  }
+
+  // ---- Feed ----
+  function addGuess(d) {
+    const el = document.createElement('div');
+    el.className = 'msg' + (d.correct ? ' correct' : '');
+    const pts = d.correct && d.points ? ` <span style="color:var(--accent-2)">+${d.points}</span>` : '';
+    el.innerHTML = `<b>${escapeHtml(d.name)}:</b> ${escapeHtml(d.text)}${pts}`;
+    appendFeed(el);
+  }
+  function addSys(text) {
+    const el = document.createElement('div');
+    el.className = 'msg sys'; el.textContent = text; appendFeed(el);
+  }
+  function appendFeed(el) { const f = $('feed'); f.appendChild(el); f.scrollTop = f.scrollHeight; }
+  function clearFeed() { $('feed').innerHTML = ''; }
+
+  // ---- Hint ----
+  function setHint(str) { $('hint').textContent = str ? str.toUpperCase() : ''; }
+
+  // ---- Results ----
+  function showResults(ranked) {
+    $('modalTitle').textContent = '🏆 Game Over';
+    $('modalSub').textContent = ranked.length ? `${ranked[0].name} wins!` : '';
+    const el = $('ranks'); el.innerHTML = '';
+    ranked.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'rank' + (i === 0 ? ' gold' : '');
+      const medal = ['🥇', '🥈', '🥉'][i] || (i + 1) + '.';
+      row.innerHTML = `<span class="pos">${medal}</span><span class="name">${escapeHtml(p.name)}</span><span class="score">${p.score}</span>`;
+      el.appendChild(row);
+    });
+    $('playAgainBtn').classList.toggle('hidden', me !== hostId);
+    $('modal').classList.remove('hidden');
+  }
+  $('playAgainBtn').onclick = () => socket.emit('play-again');
+
+  // ---- Overlay ----
+  function showOverlay(html) { const o = $('canvasOverlay'); o.innerHTML = html; o.classList.remove('hidden'); }
+  function hideOverlay() { $('canvasOverlay').classList.add('hidden'); }
+
+  // ---- Canvas (display-only; the computer draws) ----
+  const canvas = $('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
+
+  function clearCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  clearCanvas();
+
+  let animId = null;
+  function stopAnimation() { if (animId) { cancelAnimationFrame(animId); animId = null; } }
+
+  // Animate a doodle (array of strokes; each stroke = [x0,y0,x1,y1,...], coords 0..255)
+  // progressively over `ms`, scaled and centered to fill the canvas.
+  function animateDoodle(strokes, ms) {
+    stopAnimation();
+    clearCanvas();
+    $('drawBadge').classList.remove('hidden');
+
+    // Bounding box across all points.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const s of strokes) {
+      for (let i = 0; i < s.length; i += 2) {
+        minX = Math.min(minX, s[i]); maxX = Math.max(maxX, s[i]);
+        minY = Math.min(minY, s[i + 1]); maxY = Math.max(maxY, s[i + 1]);
+      }
+    }
+    const margin = 60;
+    const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
+    const scale = Math.min((canvas.width - 2 * margin) / bw, (canvas.height - 2 * margin) / bh);
+    const offX = (canvas.width - bw * scale) / 2 - minX * scale;
+    const offY = (canvas.height - bh * scale) / 2 - minY * scale;
+    const tx = (x) => offX + x * scale;
+    const ty = (y) => offY + y * scale;
+
+    // Flatten into segments, remembering stroke boundaries (pen lifts).
+    const segs = [];
+    for (const s of strokes) {
+      for (let i = 0; i + 3 < s.length; i += 2) {
+        segs.push([tx(s[i]), ty(s[i + 1]), tx(s[i + 2]), ty(s[i + 3])]);
+      }
+    }
+    if (segs.length === 0) { $('drawBadge').classList.add('hidden'); return; }
+
+    ctx.lineWidth = 4; ctx.strokeStyle = '#111';
+    const start = performance.now();
+    let drawn = 0;
+    function frame(now) {
+      const p = Math.min(1, (now - start) / ms);
+      const target = Math.floor(p * segs.length);
+      for (; drawn < target; drawn++) {
+        const s = segs[drawn];
+        ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); ctx.stroke();
+      }
+      if (p < 1) { animId = requestAnimationFrame(frame); }
+      else { animId = null; $('drawBadge').classList.add('hidden'); }
+    }
+    animId = requestAnimationFrame(frame);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+})();
+</script>
+</body>
+</html>
