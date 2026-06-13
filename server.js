@@ -25,12 +25,12 @@ const DRAW_MS = 18000;         // how long the computer "draws" the doodle (clie
 const MIN_PLAYERS = 1;         // computer draws, so even a solo player can play
 
 // ---------------------------------------------------------------------------
-// Doodle pack (Google "Quick, Draw!" sample, bundled offline)
-//   word -> [ doodle, ... ];  doodle -> [ stroke, ... ];  stroke -> [x0,y0,x1,y1,...]
+// Drawing pack (clean "Lucide" line-art icons, bundled offline)
+//   word -> [ drawing, ... ];  drawing -> [ stroke, ... ];  stroke -> [x0,y0,x1,y1,...]
 // ---------------------------------------------------------------------------
 const DOODLES = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'doodles.json'), 'utf8'));
 const WORDS = Object.keys(DOODLES);
-console.log(`Loaded ${WORDS.length} doodle categories.`);
+console.log(`Loaded ${WORDS.length} drawings.`);
 
 // ---------------------------------------------------------------------------
 // In-memory state
