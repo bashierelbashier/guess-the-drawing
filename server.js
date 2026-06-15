@@ -16,9 +16,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Config
 // ---------------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
-const ROUND_SECONDS = 45;      // each round lasts 45 seconds
+const ROUND_SECONDS = 60;      // each round lasts 60 seconds
 const GUESSES_PER_ROUND = 5;   // each player gets 5 tries per round
-const TOTAL_ROUNDS = 8;        // rounds per game
+const TOTAL_ROUNDS = 10;       // rounds per game
 const HINT_FRACTION = 0.2;     // reveal ~20% of the non-space letters
 const INTERMISSION_MS = 5000;  // pause between rounds to show the answer
 const DRAW_MS = 18000;         // how long the computer "draws" the doodle (client-side)
