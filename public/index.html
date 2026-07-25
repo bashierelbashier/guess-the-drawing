@@ -254,8 +254,15 @@
     $('lobbyControls').classList.add('hidden');
     $('modal').classList.add('hidden');
     hideOverlay();
-    addSys(`The computer is drawing — ${d.guessesPerRound} guesses each. Go!`);
-    animateDoodle(d.drawing, d.drawMs || 16000);
+    $('drawBadge').classList.add('hidden');
+    if (d.specialPuzzle) {
+      // Final special text puzzle — no doodle; only you see your own guesses.
+      addSys(`Special puzzle — ${d.guessesPerRound} guesses. Go!`);
+      showPuzzlePrompt(d.specialPuzzle);
+    } else {
+      addSys(`The computer is drawing — ${d.guessesPerRound} guesses each. Go!`);
+      animateDoodle(d.drawing, d.drawMs || 16000);
+    }
     updateGuessUI();
   });
 
@@ -356,12 +363,16 @@
     $('guessInput').value = '';
   }
 
-  // ---- Feed ----
+  // ---- Feed (private: server only sends *your* guesses) ----
   function addGuess(d) {
     const el = document.createElement('div');
     el.className = 'msg' + (d.correct ? ' correct' : '');
-    const pts = d.correct && d.points ? ` <span style="color:var(--accent-2)">+${d.points}</span>` : '';
-    el.innerHTML = `<b>${escapeHtml(d.name)}:</b> ${escapeHtml(d.text)}${pts}`;
+    if (d.correct) {
+      const pts = d.points ? ` <span style="color:var(--accent-2)">+${d.points}</span>` : '';
+      el.innerHTML = `<b>You:</b> ${escapeHtml(d.text)} 🎉${pts}`;
+    } else {
+      el.innerHTML = `<b>You:</b> ${escapeHtml(d.text)}`;
+    }
     appendFeed(el);
   }
   function addSys(text) {
@@ -394,6 +405,19 @@
   // ---- Overlay ----
   function showOverlay(html) { const o = $('canvasOverlay'); o.innerHTML = html; o.classList.remove('hidden'); }
   function hideOverlay() { $('canvasOverlay').classList.add('hidden'); }
+
+  // Special text puzzle (always the final round): show the prompt on the canvas.
+  function showPuzzlePrompt(prompt) {
+    stopAnimation();
+    clearCanvas();
+    $('drawBadge').classList.add('hidden');
+    showOverlay(
+      `<div style="max-width:90%">` +
+      `<div style="font-size:14px;color:var(--muted);margin-bottom:10px;letter-spacing:.08em;text-transform:uppercase">Puzzle</div>` +
+      `<b style="font-size:26px;line-height:1.3">${escapeHtml(prompt)}</b>` +
+      `</div>`
+    );
+  }
 
   // ---- Canvas (display-only; the computer draws) ----
   const canvas = $('canvas');

@@ -16,13 +16,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Config
 // ---------------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
-const ROUND_SECONDS = 60;      // each round lasts 60 seconds
-const GUESSES_PER_ROUND = 5;   // each player gets 5 tries per round
-const TOTAL_ROUNDS = 10;       // rounds per game
+const ROUND_SECONDS = Number(process.env.ROUND_SECONDS) || 60;      // each round lasts 60 seconds
+const GUESSES_PER_ROUND = Number(process.env.GUESSES_PER_ROUND) || 5; // each player gets 5 tries per round
+const TOTAL_ROUNDS = Number(process.env.TOTAL_ROUNDS) || 10;       // rounds per game
 const HINT_FRACTION = 0.2;     // reveal ~20% of the non-space letters
-const INTERMISSION_MS = 5000;  // pause between rounds to show the answer
+const INTERMISSION_MS = Number(process.env.INTERMISSION_MS) || 5000;  // pause between rounds to show the answer
 const DRAW_MS = 18000;         // how long the computer "draws" the doodle (client-side)
 const MIN_PLAYERS = 1;         // computer draws, so even a solo player can play
+
+// Always the 10th puzzle — text prompt, not a doodle.
+const SPECIAL_ROUND = 10;
+const SPECIAL_PUZZLE = {
+  prompt: 'The most beautiful girl ever',
+  answer: 'wiba'
+};
 
 // ---------------------------------------------------------------------------
 // Drawing pack (clean "Lucide" line-art icons, bundled offline)
@@ -123,25 +130,38 @@ function nextRound(room) {
   room.round++;
   if (room.round > TOTAL_ROUNDS) return endGame(room);
 
-  const word = pickWord();
+  const isSpecial = room.round === SPECIAL_ROUND;
+  const word = isSpecial ? SPECIAL_PUZZLE.answer : pickWord();
   room.word = word;
   room.hint = makeHint(word);
+  room.isSpecial = isSpecial;
 
   for (const p of room.players.values()) {
     p.guessedCorrectly = false;
     p.guessesLeft = GUESSES_PER_ROUND;
   }
 
-  io.to(room.id).emit('round-start', {
+  const payload = {
     round: room.round,
     totalRounds: TOTAL_ROUNDS,
     hint: room.hint,
     duration: ROUND_SECONDS,
     guessesPerRound: GUESSES_PER_ROUND,
-    drawing: pickDoodle(word),   // strokes for the client to animate
     drawMs: DRAW_MS,
-    ...(process.env.TEST_REVEAL === '1' ? { __word: word } : {}) // test hook only
-  });
+    // Guesses are private: never include other players' guess history here.
+  };
+
+  if (isSpecial) {
+    // Text puzzle instead of a computer doodle.
+    payload.specialPuzzle = SPECIAL_PUZZLE.prompt;
+    payload.drawing = null;
+  } else {
+    payload.drawing = pickDoodle(word); // strokes for the client to animate
+  }
+
+  if (process.env.TEST_REVEAL === '1') payload.__word = word; // test hook only
+
+  io.to(room.id).emit('round-start', payload);
 
   broadcastPlayers(room);
   startRoundTimer(room);
@@ -268,16 +288,19 @@ io.on('connection', (socket) => {
     const guess = normalize(text);
     if (!guess) return;
 
+    // Guesses are private: only the guessing player ever sees their own guess text
+    // (correct or wrong). Other players never receive guess-made events for peers.
     if (guess === normalize(room.word)) {
       player.guessedCorrectly = true;
       const points = Math.max(10, Math.round((room.remaining / ROUND_SECONDS) * 100));
       player.score += points;
 
-      io.to(room.id).emit('guess-made', {
+      socket.emit('guess-made', {
         name: player.name,
-        text: '🎉 guessed the word!',
+        text: String(text).slice(0, 60),
         correct: true,
-        points
+        points,
+        guessesLeft: player.guessesLeft
       });
       broadcastPlayers(room);
 
@@ -287,12 +310,13 @@ io.on('connection', (socket) => {
       }
     } else {
       player.guessesLeft--;
-      io.to(room.id).emit('guess-made', {
+      socket.emit('guess-made', {
         name: player.name,
         text: String(text).slice(0, 60),
         correct: false,
         guessesLeft: player.guessesLeft
       });
+      // Still refresh scores / guesses-left badges for everyone (no guess text).
       broadcastPlayers(room);
     }
   });
