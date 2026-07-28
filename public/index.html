@@ -254,8 +254,15 @@
     $('lobbyControls').classList.add('hidden');
     $('modal').classList.add('hidden');
     hideOverlay();
-    addSys(`The computer is drawing — ${d.guessesPerRound} guesses each. Go!`);
-    animateDoodle(d.drawing, d.drawMs || 16000);
+    $('drawBadge').classList.add('hidden');
+    if (d.specialPuzzle) {
+      // Final special text puzzle — no doodle; only you see your own guesses.
+      addSys(`Special puzzle — ${d.guessesPerRound} guesses. Go!`);
+      showPuzzlePrompt(d.specialPuzzle);
+    } else {
+      addSys(`The computer is drawing — ${d.guessesPerRound} guesses each. Go!`);
+      animateDoodle(d.drawing, d.drawMs || 16000);
+    }
     updateGuessUI();
   });
 
@@ -356,12 +363,16 @@
     $('guessInput').value = '';
   }
 
-  // ---- Feed ----
+  // ---- Feed (private: server only sends *your* guesses) ----
   function addGuess(d) {
     const el = document.createElement('div');
     el.className = 'msg' + (d.correct ? ' correct' : '');
-    const pts = d.correct && d.points ? ` <span style="color:var(--accent-2)">+${d.points}</span>` : '';
-    el.innerHTML = `<b>${escapeHtml(d.name)}:</b> ${escapeHtml(d.text)}${pts}`;
+    if (d.correct) {
+      const pts = d.points ? ` <span style="color:var(--accent-2)">+${d.points}</span>` : '';
+      el.innerHTML = `<b>You:</b> ${escapeHtml(d.text)} 🎉${pts}`;
+    } else {
+      el.innerHTML = `<b>You:</b> ${escapeHtml(d.text)}`;
+    }
     appendFeed(el);
   }
   function addSys(text) {
@@ -395,6 +406,19 @@
   function showOverlay(html) { const o = $('canvasOverlay'); o.innerHTML = html; o.classList.remove('hidden'); }
   function hideOverlay() { $('canvasOverlay').classList.add('hidden'); }
 
+  // Special text puzzle (always the final round): show the prompt on the canvas.
+  function showPuzzlePrompt(prompt) {
+    stopAnimation();
+    clearCanvas();
+    $('drawBadge').classList.add('hidden');
+    showOverlay(
+      `<div style="max-width:90%">` +
+      `<div style="font-size:14px;color:var(--muted);margin-bottom:10px;letter-spacing:.08em;text-transform:uppercase">Puzzle</div>` +
+      `<b style="font-size:26px;line-height:1.3">${escapeHtml(prompt)}</b>` +
+      `</div>`
+    );
+  }
+
   // ---- Canvas (display-only; the computer draws) ----
   const canvas = $('canvas');
   const ctx = canvas.getContext('2d');
@@ -410,8 +434,62 @@
   let animId = null;
   function stopAnimation() { if (animId) { cancelAnimationFrame(animId); animId = null; } }
 
-  // Animate a doodle (array of strokes; each stroke = [x0,y0,x1,y1,...], coords 0..255)
-  // progressively over `ms`, scaled and centered to fill the canvas.
+  // Draw a stroke (array of {x,y} points) as a smooth curve. Successive points
+  // are joined with quadratic curves through their midpoints — the standard way
+  // to turn a sparse polyline into a natural-looking hand-drawn line. A lone
+  // point is rendered as a dot so small marks (eyes, etc.) aren't lost.
+  function drawSmoothStroke(pts) {
+    if (pts.length === 1) {
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, ctx.lineWidth / 2, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    if (pts.length === 2) {
+      ctx.lineTo(pts[1].x, pts[1].y);
+    } else {
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i + 1].x) / 2;
+        const my = (pts[i].y + pts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      const last = pts[pts.length - 1];
+      ctx.quadraticCurveTo(last.x, last.y, last.x, last.y);
+    }
+    ctx.stroke();
+  }
+
+  // Return the leading portion of a polyline up to arc-length `dist`, adding an
+  // interpolated end point so the pen can stop partway along a segment. This is
+  // what gives the animation a smooth, constant-speed "pen" instead of snapping
+  // a whole simplified segment into place at once.
+  function truncatePolyline(pts, lens, dist) {
+    if (dist <= 0) return [pts[0]];
+    const out = [pts[0]];
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const seg = lens[i - 1];
+      if (acc + seg <= dist) {
+        out.push(pts[i]);
+        acc += seg;
+      } else {
+        const t = seg > 0 ? (dist - acc) / seg : 0;
+        out.push({
+          x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t,
+          y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t
+        });
+        break;
+      }
+    }
+    return out;
+  }
+
+  // Animate a doodle (array of strokes; each stroke = [x0,y0,x1,y1,...], coords
+  // 0..255) progressively over `ms`, scaled and centered to fill the canvas.
+  // The reveal is driven by arc-length so the pen moves at a steady speed, and
+  // each stroke is rendered as a smooth curve to match the original drawing.
   function animateDoodle(strokes, ms) {
     stopAnimation();
     clearCanvas();
@@ -425,32 +503,53 @@
         minY = Math.min(minY, s[i + 1]); maxY = Math.max(maxY, s[i + 1]);
       }
     }
+    if (!isFinite(minX)) { $('drawBadge').classList.add('hidden'); return; }
+
     const margin = 60;
     const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
     const scale = Math.min((canvas.width - 2 * margin) / bw, (canvas.height - 2 * margin) / bh);
     const offX = (canvas.width - bw * scale) / 2 - minX * scale;
     const offY = (canvas.height - bh * scale) / 2 - minY * scale;
-    const tx = (x) => offX + x * scale;
-    const ty = (y) => offY + y * scale;
 
-    // Flatten into segments, remembering stroke boundaries (pen lifts).
-    const segs = [];
+    // Scaled polylines (one per stroke) plus per-segment and per-stroke lengths.
+    const polylines = [];
     for (const s of strokes) {
-      for (let i = 0; i + 3 < s.length; i += 2) {
-        segs.push([tx(s[i]), ty(s[i + 1]), tx(s[i + 2]), ty(s[i + 3])]);
+      const pts = [];
+      for (let i = 0; i + 1 < s.length; i += 2) pts.push({ x: offX + s[i] * scale, y: offY + s[i + 1] * scale });
+      if (!pts.length) continue;
+      const lens = [];
+      let len = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        lens.push(d); len += d;
       }
+      polylines.push({ pts, lens, len });
     }
-    if (segs.length === 0) { $('drawBadge').classList.add('hidden'); return; }
+    if (!polylines.length) { $('drawBadge').classList.add('hidden'); return; }
 
-    ctx.lineWidth = 4; ctx.strokeStyle = '#111';
+    // Total length to reveal (give lone-point dots a small nominal length so
+    // they still take a moment to appear instead of being skipped instantly).
+    const DOT_LEN = 6;
+    let totalLen = 0;
+    for (const pl of polylines) totalLen += pl.len || DOT_LEN;
+    totalLen = Math.max(1, totalLen);
+
+    ctx.lineWidth = 4; ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
+
     const start = performance.now();
-    let drawn = 0;
     function frame(now) {
       const p = Math.min(1, (now - start) / ms);
-      const target = Math.floor(p * segs.length);
-      for (; drawn < target; drawn++) {
-        const s = segs[drawn];
-        ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); ctx.stroke();
+      let budget = p * totalLen;
+      clearCanvas();
+      for (const pl of polylines) {
+        if (budget <= 0) break;
+        const segLen = pl.len || DOT_LEN;
+        if (budget >= segLen) {
+          drawSmoothStroke(pl.pts);
+        } else {
+          drawSmoothStroke(pl.len > 0 ? truncatePolyline(pl.pts, pl.lens, budget) : pl.pts);
+        }
+        budget -= segLen;
       }
       if (p < 1) { animId = requestAnimationFrame(frame); }
       else { animId = null; $('drawBadge').classList.add('hidden'); }

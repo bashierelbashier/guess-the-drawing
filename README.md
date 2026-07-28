@@ -1,7 +1,7 @@
 # Guess the Drawing 🎨
 
 A real-time multiplayer party game where **the computer is the artist**. Each
-round it sketches a real human doodle (from Google's *Quick, Draw!* dataset),
+round it sketches a crisp, human-designed icon (from the *Lucide* icon set),
 stroke by stroke, and everyone races the 45-second clock to guess what it is.
 
 Because no human draws, nobody can throw a round — it's a fair, pure guessing
@@ -15,7 +15,7 @@ race. No database; all state lives in memory.
 - **20% letter hint** revealed in order, spaces preserved (e.g. `h___`).
 - Faster correct guesses score more (10–100 pts); live scoreboard and guess feed.
 - The word is never sent to clients until the round ends (no peeking).
-- Fully offline: a sample of doodles is bundled in `data/doodles.json`.
+- Fully offline: the icon pack is bundled in `data/doodles.json`.
 
 ## Run
 
@@ -34,8 +34,8 @@ The computer draws, so you can even play solo.
 | --- | --- |
 | `server.js` | Express + Socket.io game server (rooms, rounds, timer, hints, scoring) |
 | `public/index.html` | Single-page client: stroke animation, lobby, guessing, results |
-| `data/doodles.json` | Bundled offline doodle pack (Google *Quick, Draw!* sample) |
-| `tools/fetch-doodles.js` | Rebuild/expand the doodle pack: `node tools/fetch-doodles.js` |
+| `data/doodles.json` | Bundled offline icon pack (sampled from *Lucide*) |
+| `tools/fetch-doodles.js` | Rebuild/expand the pack: `npm i && node tools/fetch-doodles.js` |
 
 ## Configuration
 
@@ -47,9 +47,9 @@ Tweak the constants at the top of `server.js`:
 | `GUESSES_PER_ROUND` | 5 | Guesses per player per round |
 | `TOTAL_ROUNDS` | 8 | Rounds per game |
 | `HINT_FRACTION` | 0.2 | Fraction of letters revealed as a hint |
-| `DRAW_MS` | 18000 | How long the doodle takes to "draw" on the client |
+| `DRAW_MS` | 18000 | How long the drawing takes to "draw" on the client |
 
 ## Credits
 
-Doodle data from Google's [Quick, Draw! dataset](https://github.com/googlecreativelab/quickdraw-dataset)
-(Creative Commons Attribution 4.0).
+Icon artwork from [Lucide](https://lucide.dev) (ISC License), sampled into pen
+strokes by `tools/fetch-doodles.js`.
